@@ -11,7 +11,7 @@ API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 
-TASK_NAME = "AI-Powered Smart Intersection Control System"
+TASK_NAME = "smart-traffic-control"
 BENCHMARK = "openenv-v1"
 
 MAX_STEPS = 20
@@ -40,8 +40,9 @@ Use intelligent durations.
 """).strip()
 
 
+# ✅ VALIDATOR SAFE LOG FORMAT
 def log_start(task, env, model):
-    print(f"[START] 🚦 {task} | env={env} | model={model}", flush=True)
+    print(f"[START] task={task} env={env} model={model}", flush=True)
 
 
 def log_step(step, action, reward, done, error):
@@ -50,19 +51,16 @@ def log_step(step, action, reward, done, error):
 
 def log_end(success, steps, score, rewards):
     rewards_str = ",".join(f"{r:.2f}" for r in rewards)
-    print(f"[END] 🚦 {TASK_NAME} | success={str(success).lower()} steps={steps} score={score:.3f}", flush=True)
-
-def build_user_prompt(step, obs):
-    return f"Step {step}: decide traffic light"
+    print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
 
 
-def get_model_action(client, prompt):
+def get_model_action(client):
     try:
         res = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": "Decide next traffic action"},
             ],
             temperature=TEMPERATURE,
             max_tokens=MAX_TOKENS,
@@ -74,9 +72,6 @@ def get_model_action(client, prompt):
 
 def parse_action(text):
     try:
-        if not text or not isinstance(text, str):
-            raise ValueError()
-
         parts = text.strip().upper().split()
         if len(parts) != 2:
             raise ValueError()
@@ -115,10 +110,10 @@ async def main():
 
             obs = result.observation
 
-            action_text = get_model_action(client, "")
+            action_text = get_model_action(client)
             action = parse_action(action_text)
 
-            # 🔥 SMART DECISION (QUEUE + WAIT TIME)
+            # 🔥 SMART DECISION LOGIC
             ns_queue = obs.north_queue + obs.south_queue
             ew_queue = obs.east_queue + obs.west_queue
 
@@ -135,18 +130,17 @@ async def main():
 
             max_score = max(ns_score, ew_score)
 
-            # 🔥 MOMENTUM-BASED DURATION
             if max_score > 60:
-             action.duration = 50
+                action.duration = 50
             elif max_score > 40:
-             action.duration = 40
+                action.duration = 40
             elif max_score > 25:
-             action.duration = 30
+                action.duration = 30
             elif max_score > 15:
-             action.duration = 25
+                action.duration = 25
             else:
-             action.duration = 15
-    
+                action.duration = 15
+
             result = await env.step(action)
 
             reward = result.reward or 0.0

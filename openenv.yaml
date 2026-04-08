@@ -1,7 +1,21 @@
 spec_version: 1
-name: RL_demo
+
+name: AI-Powered Smart Intersection Control System
+
 type: space
 runtime: fastapi
 app: server.app:app
 port: 8000
 
+tasks:
+  - name: easy
+    description: Low traffic scenario
+    difficulty: easy
+
+  - name: medium
+    description: Moderate traffic scenario
+    difficulty: medium
+
+  - name: hard
+    description: Heavy traffic with congestion and emergencies
+    difficulty: hard

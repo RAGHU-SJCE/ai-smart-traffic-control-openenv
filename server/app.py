@@ -25,7 +25,7 @@ app = create_app(
     SmartTrafficEnv,
     TrafficAction,
     TrafficObservation,
-    env_name="Smart_Traffic_Control",
+    env_name="ai-smart-traffic-control",
     max_concurrent_envs=1,  # increase this number to allow more concurrent WebSocket sessions
 )
 

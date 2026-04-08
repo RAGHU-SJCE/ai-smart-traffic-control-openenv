@@ -5,7 +5,10 @@ import time
 
 from models import SmartTrafficEnv, TrafficAction
 
-env = SmartTrafficEnv()
+# =========================
+# GLOBALS
+# =========================
+env = SmartTrafficEnv("medium")
 current_result = None
 step_count = 0
 
@@ -16,14 +19,15 @@ rewards_history = []
 running = False
 
 
-# 🚗 moving cars
+# =========================
+# VISUALS
+# =========================
 def moving_cars(n, offset):
     cars = ["🚗"] * min(n, 10)
     shifted = [" "] * offset + cars
     return "".join(shifted[:15])
 
 
-# 🚦 intersection HTML
 def draw(obs, direction, frame):
     offset = frame % 5
 
@@ -44,7 +48,9 @@ def draw(obs, direction, frame):
     """
 
 
-# 🤖 AI decision logic
+# =========================
+# AI LOGIC
+# =========================
 def ai_decision(obs):
     ns = obs.north_queue + obs.south_queue
     ew = obs.east_queue + obs.west_queue
@@ -64,7 +70,9 @@ def ai_decision(obs):
     return direction, duration
 
 
-# 📊 graph
+# =========================
+# GRAPH
+# =========================
 def plot_graph():
     fig, ax = plt.subplots()
     ax.plot(history_ns, label="NS")
@@ -74,11 +82,16 @@ def plot_graph():
     return fig
 
 
-# 🔄 reset
-def reset_env():
-    global current_result, step_count, history_ns, history_ew, rewards_history, running
+# =========================
+# RESET WITH DIFFICULTY
+# =========================
+def reset_env(difficulty):
+    global env, current_result, step_count
+    global history_ns, history_ew, rewards_history, running
 
+    env = SmartTrafficEnv(difficulty)
     current_result = asyncio.run(env.reset())
+
     step_count = 0
     history_ns = []
     history_ew = []
@@ -88,7 +101,9 @@ def reset_env():
     return update_ui(current_result, "NS")
 
 
-# ▶ manual step
+# =========================
+# MANUAL STEP
+# =========================
 def step_env(direction, duration):
     global current_result, step_count
 
@@ -105,7 +120,9 @@ def step_env(direction, duration):
     return update_ui(current_result, direction)
 
 
-# 🤖 auto play
+# =========================
+# AUTO PLAY
+# =========================
 def auto_play(speed):
     global running, current_result, step_count
 
@@ -139,7 +156,9 @@ def stop():
     running = False
 
 
-# 🎯 UI update
+# =========================
+# UI UPDATE
+# =========================
 def update_ui(result, direction):
     obs = result.observation
 
@@ -154,10 +173,9 @@ Reward: {result.reward:.3f}
 Done: {result.done}
 """
 
-    # 🏁 FINAL RESULT
     if result.done:
         total_reward = sum(rewards_history)
-        score = max(0.0, min(total_reward / 20.0, 1.0))  # normalize
+        score = max(0.0, min(total_reward / 20.0, 1.0))
 
         final_text = f"""
 ### 🏁 FINAL RESULT
@@ -175,17 +193,25 @@ rewards:
     return frames, stats, final_text, plot_graph()
 
 
-# 🎨 UI
+# =========================
+# UI
+# =========================
 with gr.Blocks() as demo:
 
     gr.Markdown("# 🚦 AI-Powered Smart Intersection Control System")
-    gr.Markdown("### Urban Traffic Optimization using Reinforcement Learning + AI")
-    gr.Markdown("⚡ Adaptive signal control • 🚑 Emergency prioritization • 📊 Real-time optimization")
+    gr.Markdown("### Smart City Traffic Optimization using AI + RL")
 
     animation = gr.HTML()
     stats = gr.Markdown()
     final_output = gr.Markdown()
     plot = gr.Plot()
+
+    # ✅ NEW DROPDOWN
+    difficulty = gr.Dropdown(
+        ["easy", "medium", "hard"],
+        value="medium",
+        label="Difficulty Level"
+    )
 
     with gr.Row():
         direction = gr.Radio(["NS", "EW"], value="NS")
@@ -199,16 +225,26 @@ with gr.Blocks() as demo:
 
     speed = gr.Slider(0.1, 1.0, value=0.3, label="Speed")
 
-    # ✅ FIXED OUTPUTS
-    step_btn.click(step_env, [direction, duration], [animation, stats, final_output, plot])
+    # BUTTON ACTIONS
+    step_btn.click(step_env, [direction, duration],
+                   [animation, stats, final_output, plot])
 
-    auto_btn.click(auto_play, inputs=[speed], outputs=[animation, stats, final_output, plot])
+    auto_btn.click(auto_play, inputs=[speed],
+                   outputs=[animation, stats, final_output, plot])
 
     stop_btn.click(stop)
 
-    reset_btn.click(reset_env, outputs=[animation, stats, final_output, plot])
+    reset_btn.click(
+        reset_env,
+        inputs=[difficulty],
+        outputs=[animation, stats, final_output, plot]
+    )
 
-    demo.load(reset_env, outputs=[animation, stats, final_output, plot])
+    demo.load(
+        reset_env,
+        inputs=[difficulty],
+        outputs=[animation, stats, final_output, plot]
+    )
 
 
 if __name__ == "__main__":
