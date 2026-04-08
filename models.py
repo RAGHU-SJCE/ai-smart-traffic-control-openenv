@@ -1,7 +1,7 @@
 import random
 from typing import Dict
 from openenv.core.env_server.types import Action, Observation
-from pydantic import Field
+from pydantic import BaseModel, Field
 
 # =========================
 # ACTION
@@ -29,6 +29,15 @@ class TrafficObservation(Observation):
     emergency_south: bool = Field(default=False)
     emergency_east: bool = Field(default=False)
     emergency_west: bool = Field(default=False)
+
+
+# =========================
+# RESULT MODEL (🔥 FIX)
+# =========================
+class StepResult(BaseModel):
+    observation: TrafficObservation
+    reward: float
+    done: bool
 
 
 # =========================
@@ -65,7 +74,9 @@ class SmartTrafficEnv:
         self.last_direction = None
         self.state = self._create_state()
 
-    # ✅ FIXED FUNCTION
+    # =========================
+    # STATE CREATION
+    # =========================
     def _create_state(self):
         if self.difficulty == "easy":
             queue_range = (2, 8)
@@ -76,11 +87,17 @@ class SmartTrafficEnv:
 
         return TrafficState(queue_range)
 
+    # =========================
+    # RESET
+    # =========================
     async def reset(self):
         self.state = self._create_state()
         self.last_direction = None
         return self._build_result(0.0, False)
 
+    # =========================
+    # STEP
+    # =========================
     async def step(self, action: TrafficAction):
 
         if action is None:
@@ -161,9 +178,15 @@ class SmartTrafficEnv:
 
         return self._build_result(reward, done)
 
+    # =========================
+    # STATE ACCESS
+    # =========================
     def get_state(self):
         return self.state
 
+    # =========================
+    # BUILD RESULT (🔥 FIXED)
+    # =========================
     def _build_result(self, reward, done):
         obs = TrafficObservation(
             north_queue=self.state.queues["N"],
@@ -180,8 +203,8 @@ class SmartTrafficEnv:
             emergency_west=self.state.emergency["W"],
         )
 
-        return type(
-            "StepResult",
-            (),
-            {"observation": obs, "reward": reward, "done": done}
-        )()
+        return StepResult(
+            observation=obs,
+            reward=reward,
+            done=done
+        )
