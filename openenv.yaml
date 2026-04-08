@@ -1,6 +1,6 @@
 spec_version: 1
 
-name: AI-Powered Smart Intersection Control System
+name: ai-smart-traffic-control
 
 type: space
 runtime: fastapi
