@@ -35,12 +35,12 @@ GOAL:
 - Minimize wait time
 - Balance traffic
 - Avoid starvation
-
-Use intelligent durations.
 """).strip()
 
 
-# ✅ VALIDATOR SAFE LOG FORMAT
+# =========================
+# LOGGING
+# =========================
 def log_start(task, env, model):
     print(f"[START] task={task} env={env} model={model}", flush=True)
 
@@ -54,6 +54,9 @@ def log_end(success, steps, score, rewards):
     print(f"[END] success={str(success).lower()} steps={steps} score={score:.3f} rewards={rewards_str}", flush=True)
 
 
+# =========================
+# MODEL CALL
+# =========================
 def get_model_action(client):
     try:
         res = client.chat.completions.create(
@@ -70,6 +73,9 @@ def get_model_action(client):
         return "NS 20"
 
 
+# =========================
+# PARSE ACTION
+# =========================
 def parse_action(text):
     try:
         parts = text.strip().upper().split()
@@ -90,6 +96,9 @@ def parse_action(text):
         return TrafficAction(direction="NS", duration=20)
 
 
+# =========================
+# MAIN LOOP (🔥 FIXED HERE)
+# =========================
 async def main():
     client = OpenAI(base_url=API_BASE_URL, api_key=API_KEY)
     env = SmartTrafficEnv()
@@ -105,15 +114,19 @@ async def main():
         result = await env.reset()
 
         for step in range(1, MAX_STEPS + 1):
-            if result.done:
+
+            # ✅ FIX: dictionary access
+            if result["done"]:
                 break
 
-            obs = result.observation
+            obs = result["observation"]
 
             action_text = get_model_action(client)
             action = parse_action(action_text)
 
-            # 🔥 SMART DECISION LOGIC
+            # =========================
+            # SMART LOGIC
+            # =========================
             ns_queue = obs.north_queue + obs.south_queue
             ew_queue = obs.east_queue + obs.west_queue
 
@@ -143,8 +156,9 @@ async def main():
 
             result = await env.step(action)
 
-            reward = result.reward or 0.0
-            done = result.done
+            # ✅ FIX: dictionary access
+            reward = result["reward"] or 0.0
+            done = result["done"]
 
             rewards.append(reward)
             steps_taken = step

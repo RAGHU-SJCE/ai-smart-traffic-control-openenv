@@ -1,7 +1,8 @@
 import random
 from typing import Dict
 from openenv.core.env_server.types import Action, Observation
-from pydantic import BaseModel, Field
+from pydantic import Field
+
 
 # =========================
 # ACTION
@@ -29,15 +30,6 @@ class TrafficObservation(Observation):
     emergency_south: bool = Field(default=False)
     emergency_east: bool = Field(default=False)
     emergency_west: bool = Field(default=False)
-
-
-# =========================
-# RESULT MODEL (🔥 FIX)
-# =========================
-class StepResult(BaseModel):
-    observation: TrafficObservation
-    reward: float
-    done: bool
 
 
 # =========================
@@ -82,7 +74,7 @@ class SmartTrafficEnv:
             queue_range = (2, 8)
         elif self.difficulty == "medium":
             queue_range = (5, 20)
-        else:  # hard
+        else:
             queue_range = (15, 40)
 
         return TrafficState(queue_range)
@@ -185,7 +177,7 @@ class SmartTrafficEnv:
         return self.state
 
     # =========================
-    # BUILD RESULT (🔥 FIXED)
+    # FINAL RESULT (🔥 FIXED)
     # =========================
     def _build_result(self, reward, done):
         obs = TrafficObservation(
@@ -203,8 +195,8 @@ class SmartTrafficEnv:
             emergency_west=self.state.emergency["W"],
         )
 
-        return StepResult(
-            observation=obs,
-            reward=reward,
-            done=done
-        )
+        return {
+            "observation": obs,
+            "reward": reward,
+            "done": done
+        }
