@@ -1,5 +1,4 @@
 import random
-from typing import Dict
 from openenv.core.env_server.types import Action, Observation, StepResult
 from pydantic import Field
 
@@ -8,8 +7,8 @@ from pydantic import Field
 # ACTION
 # =========================
 class TrafficAction(Action):
-    direction: str = Field(..., description='"NS" or "EW"')
-    duration: int = Field(..., description='seconds')
+    direction: str = Field(..., description="NS or EW")
+    duration: int = Field(..., description="seconds")
 
 
 # =========================
@@ -28,10 +27,14 @@ class TrafficObservation(Observation):
 
 
 # =========================
-# STATE
+# ENVIRONMENT
 # =========================
-class TrafficState:
+class SmartTrafficEnv:
+
     def __init__(self):
+        self.reset_internal()
+
+    def reset_internal(self):
         self.queues = {
             "N": random.randint(5, 20),
             "S": random.randint(5, 20),
@@ -40,22 +43,13 @@ class TrafficState:
         }
 
         self.wait = {k: random.uniform(0, 10) for k in self.queues}
-        self.step_count = 0
-
-
-# =========================
-# ENVIRONMENT
-# =========================
-class SmartTrafficEnv:
-
-    def __init__(self):
-        self.state = TrafficState()
+        self.steps = 0
         self.max_steps = 20
 
     # ✅ REQUIRED
     async def reset_async(self):
-        self.state = TrafficState()
-        return self._build_result(0.0, False)
+        self.reset_internal()
+        return self._result(0.0, False)
 
     # ✅ REQUIRED
     async def step_async(self, action: TrafficAction):
@@ -68,41 +62,44 @@ class SmartTrafficEnv:
         cleared = 0
 
         for lane in lanes:
-            cars = min(self.state.queues[lane], duration // 2)
-            self.state.queues[lane] -= cars
+            cars = min(self.queues[lane], duration // 2)
+            self.queues[lane] -= cars
             cleared += cars
-            self.state.wait[lane] *= 0.5
+            self.wait[lane] *= 0.5
 
-        # incoming traffic
-        for lane in self.state.queues:
-            self.state.queues[lane] += random.randint(1, 5)
-            self.state.wait[lane] += 1
+        for lane in self.queues:
+            self.queues[lane] += random.randint(1, 5)
+            self.wait[lane] += 1
 
-        reward = cleared - sum(self.state.queues.values()) * 0.1
+        reward = cleared - sum(self.queues.values()) * 0.1
 
-        self.state.step_count += 1
-        done = self.state.step_count >= self.max_steps
+        self.steps += 1
+        done = self.steps >= self.max_steps
 
-        return self._build_result(reward, done)
+        return self._result(reward, done)
+
+    # ✅ REQUIRED (for "Get State" button)
+    def get_state(self):
+        return self._observation()
 
     # =========================
-    # BUILD RESULT ✅ IMPORTANT
+    # HELPERS
     # =========================
-    def _build_result(self, reward, done):
-
-        obs = TrafficObservation(
-            north_queue=self.state.queues["N"],
-            south_queue=self.state.queues["S"],
-            east_queue=self.state.queues["E"],
-            west_queue=self.state.queues["W"],
-            north_wait=self.state.wait["N"],
-            south_wait=self.state.wait["S"],
-            east_wait=self.state.wait["E"],
-            west_wait=self.state.wait["W"],
+    def _observation(self):
+        return TrafficObservation(
+            north_queue=self.queues["N"],
+            south_queue=self.queues["S"],
+            east_queue=self.queues["E"],
+            west_queue=self.queues["W"],
+            north_wait=self.wait["N"],
+            south_wait=self.wait["S"],
+            east_wait=self.wait["E"],
+            west_wait=self.wait["W"],
         )
 
+    def _result(self, reward, done):
         return StepResult(
-            observation=obs,
+            observation=self._observation(),
             reward=reward,
             done=done,
         )
