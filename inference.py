@@ -11,7 +11,7 @@ API_BASE_URL = os.getenv("API_BASE_URL") or "https://router.huggingface.co/v1"
 MODEL_NAME = os.getenv("MODEL_NAME") or "Qwen/Qwen2.5-72B-Instruct"
 API_KEY = os.getenv("HF_TOKEN") or os.getenv("API_KEY")
 
-TASK_NAME = "smart-traffic-control"
+TASK_NAME = "ai-smart-traffic-control"
 BENCHMARK = "openenv-v1"
 
 MAX_STEPS = 20
