@@ -1,6 +1,6 @@
 spec_version: 1
 
-name: ai-smart-traffic-control
+name: ai-smart-control-system
 
 type: space
 runtime: fastapi
@@ -9,13 +9,13 @@ port: 8000
 
 tasks:
   - name: easy
-    description: Low traffic scenario
-    difficulty: easy
+    description: Low traffic scenario with minimal congestion
+    success_criteria: Maintain total queue below 15
 
   - name: medium
-    description: Moderate traffic scenario
-    difficulty: medium
+    description: Moderate traffic with occasional imbalance
+    success_criteria: Maintain total queue below 20
 
   - name: hard
-    description: Heavy traffic with congestion and emergencies
-    difficulty: hard
+    description: Heavy congestion with emergency vehicles
+    success_criteria: Reduce congestion while handling emergencies

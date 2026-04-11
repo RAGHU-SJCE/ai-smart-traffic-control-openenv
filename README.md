@@ -1,6 +1,5 @@
 ---
 title: AI-Powered Smart Intersection Control System
-emoji: 🚦
 colorFrom: green
 colorTo: blue
 sdk: docker
@@ -13,140 +12,182 @@ tags:
   - traffic-control
 ---
 
-# 🚦 AI-Powered Smart Intersection Control System
+# AI-Powered Smart Intersection Control System
 
-An intelligent traffic signal control system built using **Reinforcement Learning + LLM + OpenEnv**, designed to simulate and optimize real-world urban traffic flow.
-
----
-
-## 🌍 Problem Statement
-
-Urban traffic congestion leads to:
-- Increased travel time ⏱️
-- Fuel wastage ⛽
-- Delayed emergency response 🚑
-
-This project simulates a **smart traffic intersection** where an AI agent dynamically controls signals to:
-- Minimize vehicle wait times
-- Maximize traffic throughput
-- Prioritize emergency vehicles
+An intelligent traffic signal control system built using Reinforcement Learning, OpenEnv, and LLM-based decision making to simulate and optimize real-world urban traffic flow.
 
 ---
 
-## 🧠 Approach
+## Motivation
 
-We model the intersection as a **Reinforcement Learning (RL) environment**:
+Urban traffic congestion causes:
+- Increased travel time
+- Fuel wastage
+- Delayed emergency response
 
-### 🔹 State (Observation)
-- Vehicle queues: North, South, East, West
-- Wait times for each lane
-- Emergency vehicle presence
-
-### 🔹 Action
-- Signal direction: `NS` or `EW`
-- Signal duration: 5–60 seconds
-
-### 🔹 Reward Function
-- ✅ Reward for clearing vehicles
-- 🚨 Bonus for handling emergency vehicles
-- ❌ Penalty for long waiting times
-- ❌ Penalty for traffic imbalance
-- ❌ Penalty for repeating same direction continuously
+This project models a real-world traffic intersection where an AI agent dynamically controls signals to:
+- Minimize vehicle queues
+- Reduce waiting time
+- Balance traffic across directions
+- Prioritize emergency scenarios
 
 ---
 
-## 🤖 AI Control System
+## Real-World Utility
 
-The system uses a **hybrid intelligence approach**:
-
-- 🧠 LLM-based reasoning (via HuggingFace router)
-- ⚙️ Rule-based optimization for stability
-
-This ensures:
-- Smart decisions
-- Consistent performance
-- Safe traffic control behavior
+This environment simulates adaptive traffic signal systems used in:
+- Smart cities
+- Intelligent Transportation Systems
+- Autonomous traffic management
 
 ---
 
-## 🎮 Features
+## Environment Design
 
-### 🚦 Interactive Simulation UI (Gradio)
-- Real-time traffic visualization
-- Animated moving vehicles 🚗
-- Traffic signals (🟢 / 🔴)
-- Emergency alerts 🚨
-- Manual + Auto AI control
+### Observation Space
+- north_queue, south_queue, east_queue, west_queue
+- emergency_waiting
+- total_queue
 
----
+### Action Space
+- 0 → North-South Green
+- 1 → East-West Green
 
-### 🤖 Auto AI Simulation
-- Fully autonomous traffic management
-- Dynamic decision-making at each step
-- Continuous environment interaction
+### Episode
+- Fixed horizon: 50 steps
 
 ---
 
-### 📊 Performance Monitoring
-- Step-by-step reward tracking
-- Traffic flow graph
-- Final evaluation metrics
+## Reward Function (0.0 – 1.0)
+
+Multi-objective reward:
+- Congestion reduction
+- Fairness
+- Traffic balance
+- Emergency handling
 
 ---
 
-## 🏁 Final Output Example
+## Grader
 
-[END] 🚦 AI-Powered Smart Intersection Control System
-success=false
-steps=20
-score=0.185
+Score calculation:
 
-rewards=[0.42, 0.44, 0.13, 0.07, 0.09, 0.13, 0.08, 0.34, ...]
+score = (congestion + fairness + balance) / 3
+
+
+Success condition:
+
+
+success = score > 0.7
 
 
 ---
 
-## 📊 Evaluation Criteria
+## Tasks
 
-The system performance is measured using a normalized score:
+### Easy
+- Low traffic
+- No emergencies
 
-| Score Range | Interpretation |
-|------------|---------------|
-| 0.0 – 0.3 | Poor traffic management |
-| 0.3 – 0.5 | Moderate optimization |
-| 0.5 – 0.8 | Good traffic balance |
-| 0.8 – 1.0 | Optimal performance |
+### Medium
+- Moderate traffic
+- Occasional emergencies
 
-### 🔍 Current Performance
-- Achieved Score: **~0.15 – 0.20**
-- Indicates moderate optimization with scope for improvement
+### Hard
+- Heavy congestion
+- Frequent emergencies
 
 ---
 
-## 🏗️ Project Structure
+## Baseline Agent
+
+Uses:
+- LLM via Hugging Face router
+- Rule-based fallback
+
+Decision rule:
+- Higher traffic direction gets priority
+
+---
+
+## Example Output
+
+[START]
+
+[STEP] task=easy
+...
+[STEP] task=easy total_reward=16.57
+
+[STEP] task=medium
+...
+[STEP] task=medium total_reward=16.26
+
+[STEP] task=hard
+...
+[STEP] task=hard total_reward=11.98
+
+[END]
+
+
+---
+
+## UI
+
+Available at:/ui
+
+
+Features:
+- Animated traffic
+- Signal control
+- Step / Reset / State buttons
+- Autoplay
+
+---
+
+## Project Structure
+
 
 RL_DEMO/
-├── models.py # RL environment logic
-├── inference.py # AI agent + evaluation loop
-├── gradio_app.py # Interactive dashboard UI
-├── server/ # OpenEnv FastAPI backend
-├── openenv.yaml # Environment config
-├── Dockerfile # Deployment setup
+├── models.py
+├── inference.py
+├── client.py
+├── gradio_app.py
+├── openenv.yaml
+├── Dockerfile
+├── pyproject.toml
+└── server/
+└── app.py
 
 
 ---
 
-## 🚀 How to Run
+## Run Locally
 
-### 1️⃣ Setup Environment
 
-```bash
 uv venv
 .venv\Scripts\activate
-uv pip install openenv openai gradio matplotlib
-
-2️⃣ Run AI Simulation
+uv pip install -e .
 uv run inference.py
 
-3️⃣ Launch UI Dashboard
-uv run gradio_app.py
+
+---
+
+## Docker
+
+
+docker build -t traffic-env .
+docker run -p 8000:8000 traffic-env
+
+
+---
+
+## Access
+
+- /web → OpenEnv UI
+- /ui → Custom UI
+
+---
+
+## Conclusion
+
+This project demonstrates how AI can optimize real-world infrastructure systems using reinforcement learning and simulation.

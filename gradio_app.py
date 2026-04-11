@@ -1,251 +1,139 @@
 import gradio as gr
-import asyncio
-import matplotlib.pyplot as plt
 import time
-
 from models import SmartTrafficEnv, TrafficAction
 
-# =========================
-# GLOBALS
-# =========================
-env = SmartTrafficEnv("medium")
-current_result = None
-step_count = 0
+env = SmartTrafficEnv()
 
-history_ns = []
-history_ew = []
-rewards_history = []
+# Safely extract initial state
+initial_state = env.reset()
+state = initial_state.dict() if hasattr(initial_state, "dict") else initial_state.model_dump()
+current_signal = 0
 
-running = False
+def render(obs, signal):
+    # safety conversion
+    if hasattr(obs, "dict"):
+        obs = obs.dict()
+    elif hasattr(obs, "model_dump"):
+        obs = obs.model_dump()
 
+    def cars(n, direction):
+        html = ""
+        for i in range(min(n, 6)):
+            html += f'<div class="car {direction}" style="animation-delay:{i*0.3}s"></div>'
+        return html
 
-# =========================
-# VISUALS
-# =========================
-def moving_cars(n, offset):
-    cars = ["🚗"] * min(n, 10)
-    shifted = [" "] * offset + cars
-    return "".join(shifted[:15])
-
-
-def draw(obs, direction, frame):
-    offset = frame % 5
+    signal_ns = "green" if signal == 0 else "red"
+    signal_ew = "green" if signal == 1 else "red"
 
     return f"""
-    <div style="text-align:center;font-family:monospace;">
-        <div>{moving_cars(obs.north_queue, offset)} 🚗</div>
-        <div>{"🟢" if direction=="NS" else "🔴"}</div>
+    <style>
+    .road {{
+        width: 400px;
+        height: 400px;
+        margin: auto;
+        background: #2c2c2c;
+        position: relative;
+    }}
 
-        <div style="display:flex;justify-content:center;">
-            <div>{moving_cars(obs.west_queue, offset)} {"🟢" if direction=="EW" else "🔴"}</div>
-            <div style="margin:0 20px;">+</div>
-            <div>{"🟢" if direction=="EW" else "🔴"} {moving_cars(obs.east_queue, offset)}</div>
+    .lane {{ position: absolute; display: flex; }}
+
+    .north {{ top: 0; left: 45%; flex-direction: column; }}
+    .south {{ bottom: 0; left: 45%; flex-direction: column; }}
+    .east {{ right: 0; top: 45%; }}
+    .west {{ left: 0; top: 45%; }}
+
+    .car {{
+        width: 15px;
+        height: 25px;
+        background: yellow;
+        margin: 2px;
+        animation: move 2s linear infinite;
+    }}
+
+    @keyframes move {{
+        0% {{ transform: translateY(0); }}
+        100% {{ transform: translateY(20px); }}
+    }}
+
+    .light {{
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+    }}
+
+    .green {{ background: lime; }}
+    .red {{ background: red; }}
+
+    .lights {{
+        position: absolute;
+        top: 45%;
+        left: 45%;
+    }}
+    </style>
+
+    <div class="road">
+        <div class="lane north">{cars(obs["north_queue"], "north")}</div>
+        <div class="lane south">{cars(obs["south_queue"], "south")}</div>
+        <div class="lane east">{cars(obs["east_queue"], "east")}</div>
+        <div class="lane west">{cars(obs["west_queue"], "west")}</div>
+
+        <div class="lights">
+            <div class="light {signal_ns}"></div>
+            <div class="light {signal_ew}"></div>
         </div>
-
-        <div>{"🟢" if direction=="NS" else "🔴"}</div>
-        <div>🚗 {moving_cars(obs.south_queue, offset)}</div>
     </div>
     """
 
+def step_fn(action):
+    global state, current_signal
+    current_signal = action
+    
+    # Run step
+    raw_result = env.step(TrafficAction(signal_phase=action))
+    
+    # FIX: Convert Pydantic object back to dict so Gradio can read it safely
+    result = raw_result.dict() if hasattr(raw_result, "dict") else raw_result.model_dump()
+    
+    state = result["observation"]
+    return render(state, current_signal), result
 
-# =========================
-# AI LOGIC
-# =========================
-def ai_decision(obs):
-    ns = obs.north_queue + obs.south_queue
-    ew = obs.east_queue + obs.west_queue
+def reset_fn():
+    global state
+    raw_state = env.reset()
+    state = raw_state.dict() if hasattr(raw_state, "dict") else raw_state.model_dump()
+    return render(state, 0), state
 
-    direction = "NS" if ns > ew else "EW"
-    load = max(ns, ew)
+def get_state_fn():
+    return state
 
-    if load > 30:
-        duration = 50
-    elif load > 20:
-        duration = 35
-    elif load > 10:
-        duration = 25
-    else:
-        duration = 15
+def autoplay_fn():
+    global state, current_signal
+    for _ in range(20):
+        ns = state["north_queue"] + state["south_queue"]
+        ew = state["east_queue"] + state["west_queue"]
 
-    return direction, duration
+        action = 0 if ns >= ew else 1
 
+        raw_result = env.step(TrafficAction(signal_phase=action))
+        result = raw_result.dict() if hasattr(raw_result, "dict") else raw_result.model_dump()
+        
+        state = result["observation"]
 
-# =========================
-# GRAPH
-# =========================
-def plot_graph():
-    fig, ax = plt.subplots()
-    ax.plot(history_ns, label="NS")
-    ax.plot(history_ew, label="EW")
-    ax.set_title("Traffic Flow")
-    ax.legend()
-    return fig
+        yield render(state, action), result
+        time.sleep(0.4)
 
+# FIX: Change the block name to `interface` so OpenEnv can import it!
+with gr.Blocks() as interface:
+    gr.Markdown("# 🚦 Smart Traffic Simulator")
 
-# =========================
-# RESET WITH DIFFICULTY
-# =========================
-def reset_env(difficulty):
-    global env, current_result, step_count
-    global history_ns, history_ew, rewards_history, running
-
-    env = SmartTrafficEnv(difficulty)
-    current_result = asyncio.run(env.reset())
-
-    step_count = 0
-    history_ns = []
-    history_ew = []
-    rewards_history = []
-    running = False
-
-    return update_ui(current_result, "NS")
-
-
-# =========================
-# MANUAL STEP
-# =========================
-def step_env(direction, duration):
-    global current_result, step_count
-
-    action = TrafficAction(direction=direction, duration=int(duration))
-    current_result = asyncio.run(env.step(action))
-    step_count += 1
-
-    obs = current_result.observation
-
-    history_ns.append(obs.north_queue + obs.south_queue)
-    history_ew.append(obs.east_queue + obs.west_queue)
-    rewards_history.append(current_result.reward)
-
-    return update_ui(current_result, direction)
-
-
-# =========================
-# AUTO PLAY
-# =========================
-def auto_play(speed):
-    global running, current_result, step_count
-
-    running = True
-
-    while running and step_count < 20:
-        obs = current_result.observation
-
-        direction, duration = ai_decision(obs)
-
-        action = TrafficAction(direction=direction, duration=duration)
-        current_result = asyncio.run(env.step(action))
-        step_count += 1
-
-        obs = current_result.observation
-
-        history_ns.append(obs.north_queue + obs.south_queue)
-        history_ew.append(obs.east_queue + obs.west_queue)
-        rewards_history.append(current_result.reward)
-
-        yield update_ui(current_result, direction)
-
-        time.sleep(speed)
-
-        if current_result.done:
-            break
-
-
-def stop():
-    global running
-    running = False
-
-
-# =========================
-# UI UPDATE
-# =========================
-def update_ui(result, direction):
-    obs = result.observation
-
-    frames = []
-    for i in range(5):
-        frames.append(draw(obs, direction, i))
-
-    stats = f"""
-### 📊 Stats
-Step: {step_count}  
-Reward: {result.reward:.3f}  
-Done: {result.done}
-"""
-
-    if result.done:
-        total_reward = sum(rewards_history)
-        score = max(0.0, min(total_reward / 20.0, 1.0))
-
-        final_text = f"""
-### 🏁 FINAL RESULT
-
-success: {"true" if score >= 0.5 else "false"}  
-steps: {step_count}  
-score: {score:.3f}  
-
-rewards:
-{[round(r, 2) for r in rewards_history]}
-"""
-    else:
-        final_text = "### ⏳ Running..."
-
-    return frames, stats, final_text, plot_graph()
-
-
-# =========================
-# UI
-# =========================
-with gr.Blocks() as demo:
-
-    gr.Markdown("# 🚦 AI-Powered Smart Intersection Control System")
-    gr.Markdown("### Smart City Traffic Optimization using AI + RL")
-
-    animation = gr.HTML()
-    stats = gr.Markdown()
-    final_output = gr.Markdown()
-    plot = gr.Plot()
-
-    # ✅ NEW DROPDOWN
-    difficulty = gr.Dropdown(
-        ["easy", "medium", "hard"],
-        value="medium",
-        label="Difficulty Level"
-    )
+    display = gr.HTML(render(state, current_signal))
+    output = gr.JSON()
 
     with gr.Row():
-        direction = gr.Radio(["NS", "EW"], value="NS")
-        duration = gr.Slider(5, 60, value=30)
+        gr.Button("Step NS").click(lambda: step_fn(0), outputs=[display, output])
+        gr.Button("Step EW").click(lambda: step_fn(1), outputs=[display, output])
 
     with gr.Row():
-        step_btn = gr.Button("▶ Step")
-        auto_btn = gr.Button("🤖 Auto Play")
-        stop_btn = gr.Button("⏹ Stop")
-        reset_btn = gr.Button("🔄 Reset")
-
-    speed = gr.Slider(0.1, 1.0, value=0.3, label="Speed")
-
-    # BUTTON ACTIONS
-    step_btn.click(step_env, [direction, duration],
-                   [animation, stats, final_output, plot])
-
-    auto_btn.click(auto_play, inputs=[speed],
-                   outputs=[animation, stats, final_output, plot])
-
-    stop_btn.click(stop)
-
-    reset_btn.click(
-        reset_env,
-        inputs=[difficulty],
-        outputs=[animation, stats, final_output, plot]
-    )
-
-    demo.load(
-        reset_env,
-        inputs=[difficulty],
-        outputs=[animation, stats, final_output, plot]
-    )
-
-
-if __name__ == "__main__":
-    demo.launch()
+        gr.Button("Reset").click(reset_fn, outputs=[display, output])
+        gr.Button("Get State").click(get_state_fn, outputs=output)
+        gr.Button("Autoplay").click(autoplay_fn, outputs=[display, output])

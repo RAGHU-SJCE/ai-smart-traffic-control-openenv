@@ -7,10 +7,10 @@
 """Rl Demo Environment."""
 
 from .client import RlDemoEnv
-from .models import RlDemoAction, RlDemoObservation
+from .models import TrafficAction, TrafficObservation, SmartTrafficEnv
 
 __all__ = [
-    "RlDemoAction",
-    "RlDemoObservation",
-    "RlDemoEnv",
+    "TrafficAction",
+    "TrafficObservation",
+    "SmartTrafficEnv",
 ]

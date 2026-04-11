@@ -1,41 +1,16 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# All rights reserved.
-
-"""
-FastAPI application for the Smart Traffic Environment.
-"""
-
-try:
-    from openenv.core.env_server.http_server import create_app
-except Exception as e:  # pragma: no cover
-    raise ImportError(
-        "openenv is required for the web interface. Install dependencies with '\n    uv sync\n'"
-    ) from e
-
-# ✅ CORRECT IMPORT (clean & proper)
+from openenv.core.env_server.http_server import create_app
 from models import TrafficAction, TrafficObservation, SmartTrafficEnv
 
+import gradio as gr
+# FIX: Import 'interface' instead of 'demo' to match your gradio_app.py file
+from gradio_app import interface 
 
-# ✅ CREATE APP
 app = create_app(
     SmartTrafficEnv,
     TrafficAction,
     TrafficObservation,
-    env_name="ai-smart-traffic-control",
-    max_concurrent_envs=1,
+    env_name="ai-smart-control-system",
 )
 
-
-def main(host: str = "0.0.0.0", port: int = 8000):
-    import uvicorn
-    uvicorn.run(app, host=host, port=port)
-
-
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8000)
-    args = parser.parse_args()
-
-    main(port=args.port)
+# FIX: Mount the 'interface' block to the /ui path
+app = gr.mount_gradio_app(app, interface, path="/ui")

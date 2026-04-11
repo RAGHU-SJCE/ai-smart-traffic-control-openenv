@@ -1,105 +1,153 @@
+from pydantic import BaseModel
 import random
-from openenv.core.env_server.types import Action, Observation, StepResult
-from pydantic import Field
 
+# -----------------------------
+# ACTION, RESET & OBSERVATION MODELS
+# -----------------------------
+class TrafficAction(BaseModel):
+    signal_phase: int  # 0 = NS, 1 = EW
 
-# =========================
-# ACTION
-# =========================
-class TrafficAction(Action):
-    direction: str = Field(..., description="NS or EW")
-    duration: int = Field(..., description="seconds")
+# FIX: Create a Pydantic model for the Reset action so the default web UI renders an input box
+class TrafficResetConfig(BaseModel):
+    task: str = "medium"  # User can type 'easy', 'medium', or 'hard'
 
+class TrafficObservation(BaseModel):
+    north_queue: int
+    south_queue: int
+    east_queue: int
+    west_queue: int
+    emergency_waiting: bool
+    total_queue: int
+    episode_id: str = "1"
+    step_count: int = 0
 
-# =========================
-# OBSERVATION
-# =========================
-class TrafficObservation(Observation):
-    north_queue: int = 0
-    south_queue: int = 0
-    east_queue: int = 0
-    west_queue: int = 0
+class TrafficStepResult(BaseModel):
+    observation: TrafficObservation
+    reward: float
+    done: bool
+    info: dict
+    episode_id: str = "1"
 
-    north_wait: float = 0.0
-    south_wait: float = 0.0
-    east_wait: float = 0.0
-    west_wait: float = 0.0
-
-
-# =========================
+# -----------------------------
 # ENVIRONMENT
-# =========================
+# -----------------------------
 class SmartTrafficEnv:
 
     def __init__(self):
-        self.reset_internal()
-
-    def reset_internal(self):
-        self.queues = {
-            "N": random.randint(5, 20),
-            "S": random.randint(5, 20),
-            "E": random.randint(5, 20),
-            "W": random.randint(5, 20),
-        }
-
-        self.wait = {k: random.uniform(0, 10) for k in self.queues}
+        self.max_queue = 50
         self.steps = 0
-        self.max_steps = 20
+        self.reset()
 
-    # ✅ REQUIRED
-    async def reset_async(self):
-        self.reset_internal()
-        return self._result(0.0, False)
+    # -----------------------------
+    # RESET
+    # -----------------------------
+    # FIX: Accept the Pydantic config model, but allow it to be None so the inference script doesn't crash
+    def reset(self, config: TrafficResetConfig = None):
+        if config is None:
+            config = TrafficResetConfig(task="medium")
+            
+        task = config.task.lower()
 
-    # ✅ REQUIRED
-    async def step_async(self, action: TrafficAction):
+        if task == "easy":
+            self.arrival_range = (0, 2)
+            self.north = random.randint(2, 8)
+            self.south = random.randint(2, 8)
+            self.east = random.randint(2, 8)
+            self.west = random.randint(2, 8)
+            self.emergency = False
 
-        direction = action.direction.upper()
-        duration = max(5, min(action.duration, 60))
+        elif task == "hard":
+            self.arrival_range = (3, 8)
+            self.north = random.randint(15, 25)
+            self.south = random.randint(15, 25)
+            self.east = random.randint(15, 25)
+            self.west = random.randint(15, 25)
+            self.emergency = True
 
-        lanes = ["N", "S"] if direction == "NS" else ["E", "W"]
+        else:
+            self.arrival_range = (0, 5)
+            self.north = random.randint(5, 15)
+            self.south = random.randint(5, 15)
+            self.east = random.randint(5, 15)
+            self.west = random.randint(5, 15)
+            self.emergency = random.choice([True, False])
 
-        cleared = 0
+        self.steps = 0
+        return self.get_state()
 
-        for lane in lanes:
-            cars = min(self.queues[lane], duration // 2)
-            self.queues[lane] -= cars
-            cleared += cars
-            self.wait[lane] *= 0.5
-
-        for lane in self.queues:
-            self.queues[lane] += random.randint(1, 5)
-            self.wait[lane] += 1
-
-        reward = cleared - sum(self.queues.values()) * 0.1
-
-        self.steps += 1
-        done = self.steps >= self.max_steps
-
-        return self._result(reward, done)
-
-    # ✅ REQUIRED (for "Get State" button)
+    # -----------------------------
+    # STATE
+    # -----------------------------
     def get_state(self):
-        return self._observation()
+        total = self.north + self.south + self.east + self.west
 
-    # =========================
-    # HELPERS
-    # =========================
-    def _observation(self):
         return TrafficObservation(
-            north_queue=self.queues["N"],
-            south_queue=self.queues["S"],
-            east_queue=self.queues["E"],
-            west_queue=self.queues["W"],
-            north_wait=self.wait["N"],
-            south_wait=self.wait["S"],
-            east_wait=self.wait["E"],
-            west_wait=self.wait["W"],
+            north_queue=self.north,
+            south_queue=self.south,
+            east_queue=self.east,
+            west_queue=self.west,
+            emergency_waiting=self.emergency,
+            total_queue=total,
+            episode_id="1",
+            step_count=self.steps
         )
 
-    def _result(self, reward, done):
-        return StepResult(
-            observation=self._observation(),
+    @property
+    def state(self):
+        return self.get_state()
+
+    # -----------------------------
+    # STEP
+    # -----------------------------
+    def step(self, action: TrafficAction):
+        self.steps += 1
+
+        # arrivals
+        self.north += random.randint(*self.arrival_range)
+        self.south += random.randint(*self.arrival_range)
+        self.east += random.randint(*self.arrival_range)
+        self.west += random.randint(*self.arrival_range)
+
+        # signal effect
+        if action.signal_phase == 0:
+            self.north -= min(self.north, 10)
+            self.south -= min(self.south, 10)
+        else:
+            self.east -= min(self.east, 10)
+            self.west -= min(self.west, 10)
+
+        total = self.north + self.south + self.east + self.west
+
+        reward = max(0.0, min(1.0, 1 - total / 200))
+        done = self.steps >= 50
+
+        return TrafficStepResult(
+            observation=self.get_state(),
             reward=reward,
             done=done,
+            info={
+                "score": reward,
+                "success": reward > 0.7
+            },
+            episode_id="1"
         )
+
+    # -----------------------------
+    # ASYNC WRAPPERS (CRITICAL)
+    # -----------------------------
+    # FIX: Expose the config parameter to the async wrapper for the web UI
+    async def reset_async(self, config: TrafficResetConfig = None):
+        if config is None:
+            config = TrafficResetConfig(task="medium")
+            
+        obs = self.reset(config)
+        return TrafficStepResult(
+            observation=obs,
+            reward=0.0,
+            done=False,
+            info={},
+            episode_id="1"
+        )
+
+    async def step_async(self, action: TrafficAction):
+        return self.step(action)
