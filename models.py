@@ -7,9 +7,6 @@ import random
 class TrafficAction(BaseModel):
     signal_phase: int  # 0 = NS, 1 = EW
 
-class TrafficResetConfig(BaseModel):
-    task: str = "medium"
-
 class TrafficObservation(BaseModel):
     north_queue: int
     south_queue: int
@@ -19,11 +16,10 @@ class TrafficObservation(BaseModel):
     total_queue: int
     episode_id: str = "1"
     step_count: int = 0
-    # Added fields to satisfy the Web UI without breaking the auto-grader!
+    # Keeps the Web UI from crashing
     reward: float = 0.0
     done: bool = False
 
-# FIX: Added the missing TrafficStepResult class back so VS Code won't throw an error!
 class TrafficStepResult(BaseModel):
     observation: TrafficObservation
     reward: float
@@ -42,18 +38,11 @@ class SmartTrafficEnv:
         self.reset()
 
     # -----------------------------
-    # RESET
+    # RESET (Python - For Inference Script)
     # -----------------------------
-    def reset(self, config=None):
-        # FIX: Handle plain string from inference.py
-        if isinstance(config, str):
-            task = config.lower()
-        # Handle empty input
-        elif config is None:
-            task = "medium"
-        # Handle Pydantic model from Web UI
-        else:
-            task = config.task.lower()
+    # FIX: Accepts a simple string from inference.py, NO Pydantic config!
+    def reset(self, task: str = "medium"):
+        task = task.lower()
 
         if task == "easy":
             self.arrival_range = (0, 2)
@@ -98,13 +87,11 @@ class SmartTrafficEnv:
     def step(self, action: TrafficAction):
         self.steps += 1
 
-        # arrivals
         self.north += random.randint(*self.arrival_range)
         self.south += random.randint(*self.arrival_range)
         self.east += random.randint(*self.arrival_range)
         self.west += random.randint(*self.arrival_range)
 
-        # signal effect
         if action.signal_phase == 0:
             self.north -= min(self.north, 10)
             self.south -= min(self.south, 10)
@@ -117,7 +104,6 @@ class SmartTrafficEnv:
         reward = max(0.0, min(1.0, 1 - total / 200))
         done = self.steps >= 50
 
-        # Returning the correct Step Result so the Step UI works!
         return TrafficStepResult(
             observation=self.get_state(),
             reward=reward,
@@ -130,14 +116,11 @@ class SmartTrafficEnv:
         )
 
     # -----------------------------
-    # ASYNC WRAPPERS (CRITICAL)
+    # ASYNC WRAPPERS (FOR THE API GRADER)
     # -----------------------------
-    async def reset_async(self, config: TrafficResetConfig = None):
-        if config is None:
-            config = TrafficResetConfig(task="medium")
-        
-        # Returning ONLY the observation to satisfy the Phase 1 Grader!
-        return self.reset(config)
+    # FIX: Absolutely NO arguments here! This exactly matches the API spec.
+    async def reset_async(self):
+        return self.reset()
 
     async def step_async(self, action: TrafficAction):
         return self.step(action)
