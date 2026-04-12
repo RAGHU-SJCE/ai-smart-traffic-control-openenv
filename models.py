@@ -7,6 +7,9 @@ import random
 class TrafficAction(BaseModel):
     signal_phase: int  # 0 = NS, 1 = EW
 
+class TrafficResetConfig(BaseModel):
+    task: str = "medium"
+
 class TrafficObservation(BaseModel):
     north_queue: int
     south_queue: int
@@ -16,7 +19,7 @@ class TrafficObservation(BaseModel):
     total_queue: int
     episode_id: str = "1"
     step_count: int = 0
-    # Keeps the Web UI from crashing
+    # Keeps the Web UI stable without breaking the auto-grader
     reward: float = 0.0
     done: bool = False
 
@@ -38,11 +41,18 @@ class SmartTrafficEnv:
         self.reset()
 
     # -----------------------------
-    # RESET (Python - For Inference Script)
+    # RESET
     # -----------------------------
-    # FIX: Accepts a simple string from inference.py, NO Pydantic config!
-    def reset(self, task: str = "medium"):
-        task = task.lower()
+    # FIX: Bulletproof reset that accepts ANY input (string, Pydantic model, or None)
+    def reset(self, config=None):
+        if isinstance(config, str):
+            task = config.lower()
+        elif hasattr(config, "task"):
+            task = config.task.lower()
+        elif isinstance(config, dict) and "task" in config:
+            task = config["task"].lower()
+        else:
+            task = "medium"
 
         if task == "easy":
             self.arrival_range = (0, 2)
@@ -118,9 +128,9 @@ class SmartTrafficEnv:
     # -----------------------------
     # ASYNC WRAPPERS (FOR THE API GRADER)
     # -----------------------------
-    # FIX: Absolutely NO arguments here! This exactly matches the API spec.
-    async def reset_async(self):
-        return self.reset()
+    # FIX: MUST accept 'config' so the FastAPI server doesn't crash with a TypeError!
+    async def reset_async(self, config: TrafficResetConfig = None):
+        return self.reset(config)
 
     async def step_async(self, action: TrafficAction):
         return self.step(action)
